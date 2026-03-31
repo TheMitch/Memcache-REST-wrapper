@@ -1,0 +1,27 @@
+{
+  "name": "memcache-api",
+  "version": "0.1.0",
+  "description": "Redis-backed cache REST API as defined in docs/BusinessLogic.md",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon --watch src src/server.js",
+    "openapi:json": "node scripts/export-openapi-json.js",
+    "lint": "echo \"No lint configured\"",
+    "test": "node --test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.4.1",
+    "morgan": "^1.10.0",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

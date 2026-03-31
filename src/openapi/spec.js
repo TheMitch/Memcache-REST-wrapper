@@ -1,0 +1,370 @@
+const config = require('../config');
+
+const openApiSpec = {
+  openapi: '3.0.3',
+  info: {
+    title: 'memcache-api',
+    version: '0.1.0',
+    description: 'Redis-backed cache API for opaque payload storage and tag-based invalidation.',
+  },
+  servers: [
+    {
+      url: '/',
+      description: 'Current deployment host',
+    },
+  ],
+  tags: [
+    { name: 'Objects', description: 'Store, read, and delete cached objects.' },
+    { name: 'Tags', description: 'Invalidate cached objects by tag.' },
+    { name: 'Health', description: 'Service health endpoint.' },
+  ],
+  security: [{}, { ApiKeyAuth: [] }],
+  components: {
+    securitySchemes: {
+      ApiKeyAuth: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'X-API-Key',
+        description: 'Required when the server is configured with API_KEY.',
+      },
+    },
+    parameters: {
+      NamespaceParam: {
+        name: 'namespace',
+        in: 'path',
+        required: true,
+        schema: {
+          type: 'string',
+          minLength: config.minIdLength,
+          maxLength: config.maxIdLength,
+          pattern: '^[A-Za-z0-9._-]+$',
+        },
+        description: 'Object namespace (URL-safe).',
+      },
+      IdParam: {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: {
+          type: 'string',
+          minLength: config.minIdLength,
+          maxLength: config.maxIdLength,
+          pattern: '^[A-Za-z0-9._-]+$',
+        },
+        description: 'Object id (URL-safe).',
+      },
+      TagPathParam: {
+        name: 'tag',
+        in: 'path',
+        required: true,
+        schema: {
+          type: 'string',
+          maxLength: config.maxTagLength,
+          pattern: '^[\\x20-\\x2B\\x2D-\\x7E]+$',
+        },
+        description: 'Single tag value (printable ASCII, no commas).',
+      },
+      TagsHeaderParam: {
+        name: 'X-Tag',
+        in: 'header',
+        required: false,
+        schema: {
+          type: 'string',
+        },
+        description: 'Comma-separated tags. Example: system:salto, customer:customer-42',
+      },
+      TtlSecondsQuery: {
+        name: 'ttlSeconds',
+        in: 'query',
+        required: false,
+        schema: {
+          type: 'integer',
+          minimum: config.ttl.minSeconds,
+          maximum: config.ttl.maxSeconds,
+        },
+        description: `TTL in seconds. Defaults to ${config.ttl.defaultSeconds}.`,
+      },
+      MatchQuery: {
+        name: 'match',
+        in: 'query',
+        required: false,
+        schema: {
+          type: 'string',
+          enum: ['any', 'all'],
+          default: 'any',
+        },
+        description: 'Tag matching mode. "any" for OR, "all" for AND.',
+      },
+      TagQuery: {
+        name: 'tag',
+        in: 'query',
+        required: true,
+        style: 'form',
+        explode: true,
+        schema: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'string',
+            maxLength: config.maxTagLength,
+            pattern: '^[\\x20-\\x2B\\x2D-\\x7E]+$',
+          },
+        },
+        description: 'Repeat to provide multiple tags: ?tag=a&tag=b',
+      },
+    },
+    schemas: {
+      Error: {
+        type: 'object',
+        required: ['error'],
+        properties: {
+          error: {
+            type: 'string',
+          },
+          details: {
+            type: 'string',
+          },
+        },
+      },
+      PutObjectResponse: {
+        type: 'object',
+        required: ['namespace', 'id', 'ttlSeconds', 'tags'],
+        properties: {
+          namespace: { type: 'string' },
+          id: { type: 'string' },
+          ttlSeconds: { type: 'integer' },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+      },
+      DeleteObjectResponse: {
+        type: 'object',
+        required: ['deleted'],
+        properties: {
+          deleted: { type: 'boolean' },
+        },
+      },
+      InvalidateByTagResponse: {
+        type: 'object',
+        required: ['invalidated', 'tag', 'count'],
+        properties: {
+          invalidated: { type: 'boolean' },
+          tag: { type: 'string' },
+          count: { type: 'integer' },
+        },
+      },
+      InvalidateByTagsResponse: {
+        type: 'object',
+        required: ['invalidated', 'match', 'count'],
+        properties: {
+          invalidated: { type: 'boolean' },
+          match: { type: 'string', enum: ['any', 'all'] },
+          count: { type: 'integer' },
+        },
+      },
+      HealthResponse: {
+        type: 'object',
+        required: ['status', 'redis'],
+        properties: {
+          status: { type: 'string', example: 'ok' },
+          redis: { type: 'string', example: 'ok' },
+        },
+      },
+    },
+    responses: {
+      BadRequest: {
+        description: 'Bad request.',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+      Unauthorized: {
+        description: 'Unauthorized.',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+      NotFound: {
+        description: 'Resource not found.',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+      InternalError: {
+        description: 'Internal server error.',
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Error' },
+          },
+        },
+      },
+    },
+  },
+  paths: {
+    '/v1/objects/{namespace}/{id}': {
+      put: {
+        tags: ['Objects'],
+        operationId: 'putObject',
+        summary: 'Store or overwrite an object',
+        parameters: [
+          { $ref: '#/components/parameters/NamespaceParam' },
+          { $ref: '#/components/parameters/IdParam' },
+          { $ref: '#/components/parameters/TtlSecondsQuery' },
+          { $ref: '#/components/parameters/TagsHeaderParam' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            '*/*': {
+              schema: {
+                type: 'string',
+                format: 'binary',
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Object stored.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/PutObjectResponse' },
+              },
+            },
+          },
+          '400': { $ref: '#/components/responses/BadRequest' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '500': { $ref: '#/components/responses/InternalError' },
+        },
+      },
+      get: {
+        tags: ['Objects'],
+        operationId: 'getObject',
+        summary: 'Retrieve an object',
+        parameters: [
+          { $ref: '#/components/parameters/NamespaceParam' },
+          { $ref: '#/components/parameters/IdParam' },
+        ],
+        responses: {
+          '200': {
+            description: 'Object found.',
+            headers: {
+              'X-Tag': {
+                description: 'Comma-separated tags associated with the object.',
+                schema: { type: 'string' },
+              },
+            },
+            content: {
+              '*/*': {
+                schema: {
+                  type: 'string',
+                  format: 'binary',
+                },
+              },
+            },
+          },
+          '400': { $ref: '#/components/responses/BadRequest' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '404': { $ref: '#/components/responses/NotFound' },
+          '500': { $ref: '#/components/responses/InternalError' },
+        },
+      },
+      delete: {
+        tags: ['Objects'],
+        operationId: 'deleteObject',
+        summary: 'Delete a single object',
+        parameters: [
+          { $ref: '#/components/parameters/NamespaceParam' },
+          { $ref: '#/components/parameters/IdParam' },
+        ],
+        responses: {
+          '200': {
+            description: 'Deletion result.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/DeleteObjectResponse' },
+              },
+            },
+          },
+          '400': { $ref: '#/components/responses/BadRequest' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '500': { $ref: '#/components/responses/InternalError' },
+        },
+      },
+    },
+    '/v1/tags/{tag}': {
+      delete: {
+        tags: ['Tags'],
+        operationId: 'invalidateByTag',
+        summary: 'Invalidate objects by a single tag',
+        parameters: [{ $ref: '#/components/parameters/TagPathParam' }],
+        responses: {
+          '200': {
+            description: 'Invalidation result.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/InvalidateByTagResponse' },
+              },
+            },
+          },
+          '400': { $ref: '#/components/responses/BadRequest' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '500': { $ref: '#/components/responses/InternalError' },
+        },
+      },
+    },
+    '/v1/tags': {
+      delete: {
+        tags: ['Tags'],
+        operationId: 'invalidateByTags',
+        summary: 'Invalidate objects by multiple tags',
+        parameters: [
+          { $ref: '#/components/parameters/MatchQuery' },
+          { $ref: '#/components/parameters/TagQuery' },
+        ],
+        responses: {
+          '200': {
+            description: 'Invalidation result.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/InvalidateByTagsResponse' },
+              },
+            },
+          },
+          '400': { $ref: '#/components/responses/BadRequest' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '500': { $ref: '#/components/responses/InternalError' },
+        },
+      },
+    },
+    '/v1/health': {
+      get: {
+        tags: ['Health'],
+        operationId: 'healthCheck',
+        summary: 'Health check',
+        responses: {
+          '200': {
+            description: 'Service is healthy.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/HealthResponse' },
+              },
+            },
+          },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '500': { $ref: '#/components/responses/InternalError' },
+        },
+      },
+    },
+  },
+};
+
+module.exports = openApiSpec;
