@@ -25,7 +25,7 @@ const openApiSpec = {
         type: 'apiKey',
         in: 'header',
         name: 'X-API-Key',
-        description: 'Required when the server is configured with API_KEY.',
+        description: 'Required when the server is configured with API_KEY or API_KEY_SECONDARY.',
       },
     },
     parameters: {

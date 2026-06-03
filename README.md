@@ -67,7 +67,7 @@ Error responses always follow `{ "error": "string", "details": "optional" }`.
      --region=us-central1 \
      --allow-unauthenticated \
      --vpc-connector memcache-connector \
-     --set-env-vars REDIS_URL=redis://<HOST>:6379,API_KEY=<OPTIONAL_KEY>
+     --set-env-vars REDIS_URL=redis://<HOST>:6379,API_KEY=<OPTIONAL_KEY>,API_KEY_SECONDARY=<OPTIONAL_ROTATION_KEY>
    ```
    Cloud Run automatically sets `PORT`, which the app already honors. Adjust memory/CPU and authentication flags as needed.
 
@@ -76,7 +76,7 @@ A Google Cloud-specific PowerShell helper script lives at `scripts/deploy-google
 ```
 pwsh ./scripts/deploy-google-cloudrun.ps1 -ProjectId my-project -Region us-central1 -ServiceName memcache-api
 ```
-By default, the script reads `API_KEY` from `.env` (repo root) and then from the process environment variable `API_KEY`. You can still override explicitly with `-ApiKey <value>`.
+By default, the script reads `API_KEY` and `API_KEY_SECONDARY` from `.env` (repo root) and then from process environment variables with the same names. You can still override explicitly with `-ApiKey <value>` and `-ApiKeySecondary <value>`.
 It uses Cloud Build by default (and will automatically fall back to Docker if Cloud Build hits SSL interception issues), but you can append `-BuildStrategy Docker` to force a local build/push. The Docker path requires Docker Desktop/Engine to be running beforehand.
 If your network requires a custom root certificate, pass `-CustomCaCertPath C:\path\corp-ca.pem` and the script will configure `gcloud` to use it before building.
 
@@ -85,7 +85,7 @@ For macOS/Linux, use:
 chmod +x ./scripts/deploy-google-cloudrun.sh
 ./scripts/deploy-google-cloudrun.sh --project-id my-project --region us-central1 --service-name memcache-api
 ```
-The Bash script supports equivalent options (`--build-strategy`, `--api-key`, `--artifact-repo`, etc.) and the same API key resolution order.
+The Bash script supports equivalent options (`--build-strategy`, `--api-key`, `--api-key-secondary`, `--artifact-repo`, etc.) and the same API key resolution order.
 
 `scripts/deploy-cloudrun.ps1` remains as a compatibility wrapper and forwards to `deploy-google-cloudrun.ps1`.
 
@@ -95,4 +95,4 @@ It will:
 - build & push the container
 - create a Memorystore Redis instance (or reuse an existing one)
 - provision a Serverless VPC connector if missing
-- deploy the Cloud Run service with the proper `REDIS_URL` (and optional `API_KEY`)
+- deploy the Cloud Run service with the proper `REDIS_URL` (and optional `API_KEY` / `API_KEY_SECONDARY`)

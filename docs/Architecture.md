@@ -5,7 +5,7 @@ This document explains how the service is structured and how requests flow throu
 ## High-Level Components
 - `src/server.js`: starts HTTP server and initializes Redis connection.
 - `src/app.js`: wires middleware and routes.
-- `src/middleware/auth.js`: enforces API key authentication via `X-API-Key` when configured.
+- `src/middleware/auth.js`: enforces API key authentication via `X-API-Key` when one or more keys are configured.
 - `src/routes/*.js`: HTTP endpoints for objects, tags, health, and docs.
 - `src/services/cacheService.js`: core Redis interactions and invalidation logic.
 - `src/storage/redisClient.js`: shared `ioredis` client.
@@ -21,7 +21,7 @@ This document explains how the service is structured and how requests flow throu
 
 ## Runtime Request Pipeline
 1. Request enters Express app (`helmet`, `morgan`).
-2. Auth middleware checks `X-API-Key` if API key is configured.
+2. Auth middleware checks `X-API-Key` if one or more API keys are configured.
 3. Route validates identifiers/tags/TTL/content type.
 4. Route calls cache service.
 5. Cache service reads/writes Redis object keys and tag index sets.

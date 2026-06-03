@@ -7,6 +7,7 @@ param(
     [int]$RedisSizeGb = 1,
     [string]$VpcConnectorRange = '10.8.0.0/28',
     [string]$ApiKey,
+    [string]$ApiKeySecondary,
     [string]$ArtifactRepo = 'memcache',
     [string]$CustomCaCertPath,
     [ValidateSet('CloudBuild', 'Docker')] [string]$BuildStrategy = 'CloudBuild'
@@ -151,9 +152,25 @@ if ([string]::IsNullOrWhiteSpace($ApiKey)) {
         $ApiKey = $env:API_KEY
         Write-Host 'Using API_KEY from environment variable API_KEY' -ForegroundColor DarkCyan
     }
-    else {
-        Write-Warning 'API_KEY not provided. Deploying without API key enforcement.'
+}
+
+if ([string]::IsNullOrWhiteSpace($ApiKeySecondary)) {
+    if (-not $dotEnvPath) {
+        $dotEnvPath = Join-Path $PSScriptRoot '..\.env'
     }
+    $apiKeySecondaryFromDotEnv = Get-DotEnvValue -Path $dotEnvPath -Key 'API_KEY_SECONDARY'
+    if (-not [string]::IsNullOrWhiteSpace($apiKeySecondaryFromDotEnv)) {
+        $ApiKeySecondary = $apiKeySecondaryFromDotEnv
+        Write-Host "Using API_KEY_SECONDARY from $dotEnvPath" -ForegroundColor DarkCyan
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:API_KEY_SECONDARY)) {
+        $ApiKeySecondary = $env:API_KEY_SECONDARY
+        Write-Host 'Using API_KEY_SECONDARY from environment variable API_KEY_SECONDARY' -ForegroundColor DarkCyan
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($ApiKey) -and [string]::IsNullOrWhiteSpace($ApiKeySecondary)) {
+    Write-Warning 'API_KEY and API_KEY_SECONDARY not provided. Deploying without API key enforcement.'
 }
 
 $env:GOOGLE_CLOUD_PROJECT = $ProjectId
@@ -221,6 +238,9 @@ if ($LASTEXITCODE -ne 0) {
 $envVars = "REDIS_URL=$redisUrl"
 if ($ApiKey) {
     $envVars += ",API_KEY=$ApiKey"
+}
+if ($ApiKeySecondary) {
+    $envVars += ",API_KEY_SECONDARY=$ApiKeySecondary"
 }
 
 Run-Gcloud @('run', 'deploy', $ServiceName, '--image', $fullImage, "--region=$Region", '--allow-unauthenticated', "--vpc-connector=$connectorName", "--set-env-vars=$envVars")

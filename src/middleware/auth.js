@@ -1,12 +1,12 @@
 const config = require('../config');
 
 const authMiddleware = (req, res, next) => {
-  if (!config.apiKey) {
+  if (config.apiKeys.length === 0) {
     return next();
   }
 
   const providedKey = req.header('X-API-Key');
-  if (providedKey && providedKey === config.apiKey) {
+  if (providedKey && config.apiKeys.includes(providedKey)) {
     return next();
   }
 

@@ -278,7 +278,7 @@ All non-2xx responses MUST return machine-readable JSON:
 
 The API MUST support request authentication (e.g., API key header or equivalent).
 
-When API key enforcement is enabled, clients MUST include `X-API-Key: <secret>` on every request. Missing or mismatched keys MUST yield 401 Unauthorized with the standard error envelope.
+When API key enforcement is enabled, clients MUST include `X-API-Key: <secret>` on every request. The server MAY be configured with `API_KEY` and optional `API_KEY_SECONDARY` to support key rotation; either configured value MUST be accepted. Missing or mismatched keys MUST yield 401 Unauthorized with the standard error envelope.
 
 The API MUST NOT allow arbitrary Redis command execution.
 

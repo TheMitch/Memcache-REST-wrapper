@@ -11,6 +11,7 @@ VPC_CONNECTOR_RANGE="10.8.0.0/28"
 ARTIFACT_REPO="memcache"
 BUILD_STRATEGY="CloudBuild"
 API_KEY_OVERRIDE=""
+API_KEY_SECONDARY_OVERRIDE=""
 CUSTOM_CA_CERT_PATH=""
 
 usage() {
@@ -28,6 +29,7 @@ Options:
   --vpc-connector-range     CIDR for Serverless VPC connector (default: 10.8.0.0/28)
   --artifact-repo           Artifact Registry repo name (default: memcache)
   --api-key                 API key override (optional)
+  --api-key-secondary       Secondary API key override for rotation (optional)
   --custom-ca-cert-path     Path to custom CA cert for gcloud (optional)
   --build-strategy          CloudBuild or Docker (default: CloudBuild)
   --help, -h                Show this help
@@ -36,6 +38,11 @@ API key resolution order:
   1) --api-key
   2) .env file at repo root (API_KEY=...)
   3) API_KEY environment variable
+
+Secondary API key resolution order:
+  1) --api-key-secondary
+  2) .env file at repo root (API_KEY_SECONDARY=...)
+  3) API_KEY_SECONDARY environment variable
 EOF
 }
 
@@ -141,6 +148,10 @@ while [[ $# -gt 0 ]]; do
       API_KEY_OVERRIDE="${2:-}"
       shift 2
       ;;
+    --api-key-secondary)
+      API_KEY_SECONDARY_OVERRIDE="${2:-}"
+      shift 2
+      ;;
     --artifact-repo)
       ARTIFACT_REPO="${2:-}"
       shift 2
@@ -192,6 +203,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTENV_PATH="${SCRIPT_DIR}/../.env"
 DEPLOY_API_KEY="$API_KEY_OVERRIDE"
+DEPLOY_API_KEY_SECONDARY="$API_KEY_SECONDARY_OVERRIDE"
 
 if [[ -z "$DEPLOY_API_KEY" ]]; then
   api_key_from_dotenv="$(get_dotenv_value "$DOTENV_PATH" "API_KEY" || true)"
@@ -201,9 +213,22 @@ if [[ -z "$DEPLOY_API_KEY" ]]; then
   elif [[ -n "${API_KEY:-}" ]]; then
     DEPLOY_API_KEY="${API_KEY}"
     echo "Using API_KEY from environment variable API_KEY"
-  else
-    echo "WARNING: API_KEY not provided. Deploying without API key enforcement." >&2
   fi
+fi
+
+if [[ -z "$DEPLOY_API_KEY_SECONDARY" ]]; then
+  api_key_secondary_from_dotenv="$(get_dotenv_value "$DOTENV_PATH" "API_KEY_SECONDARY" || true)"
+  if [[ -n "$api_key_secondary_from_dotenv" ]]; then
+    DEPLOY_API_KEY_SECONDARY="$api_key_secondary_from_dotenv"
+    echo "Using API_KEY_SECONDARY from $DOTENV_PATH"
+  elif [[ -n "${API_KEY_SECONDARY:-}" ]]; then
+    DEPLOY_API_KEY_SECONDARY="${API_KEY_SECONDARY}"
+    echo "Using API_KEY_SECONDARY from environment variable API_KEY_SECONDARY"
+  fi
+fi
+
+if [[ -z "$DEPLOY_API_KEY" && -z "$DEPLOY_API_KEY_SECONDARY" ]]; then
+  echo "WARNING: API_KEY and API_KEY_SECONDARY not provided. Deploying without API key enforcement." >&2
 fi
 
 export GOOGLE_CLOUD_PROJECT="$PROJECT_ID"
@@ -273,6 +298,9 @@ fi
 env_vars="REDIS_URL=$redis_url"
 if [[ -n "$DEPLOY_API_KEY" ]]; then
   env_vars="${env_vars},API_KEY=$DEPLOY_API_KEY"
+fi
+if [[ -n "$DEPLOY_API_KEY_SECONDARY" ]]; then
+  env_vars="${env_vars},API_KEY_SECONDARY=$DEPLOY_API_KEY_SECONDARY"
 fi
 
 run_gcloud run deploy "$SERVICE_NAME" --image "$FULL_IMAGE" --region "$REGION" --allow-unauthenticated --vpc-connector "$connector_name" --set-env-vars "$env_vars"
